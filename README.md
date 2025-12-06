@@ -69,10 +69,12 @@ To run the script, execute the Python file directly from your terminal:
 
 ```bash
 python Audio_to_Text_OAI_Whisper.py
-
+```
 The script will prompt you to enter the YouTube URL.
-Example Output
 
+Example Output:
+
+```bash
 Enter the YouTube URL: https://www.youtube.com/watch?v=dQw4w9WgXcQ
 Fetching video title...
 Title: Rick Astley - Never Gonna Give You Up (Official Music Video)
@@ -82,5 +84,4 @@ Audio downloaded successfully.
 Raw transcription complete.
 --- Cleaning raw transcript for pure text output ---
 Clean text successfully saved to: ./transcribed_audio/Rick_Astley_-_Never_Gonna_Give_You_Up_(Official_Music_Video)_clean.txt
-
 Cleaned up temporary files from transcribed_audio.
