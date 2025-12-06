@@ -33,7 +33,7 @@ You must have the following tools installed on your system:
     ```bash
     pip install mlx-whisper
     # Note: 'mlx-whisper' may have specific dependencies for certain systems (like MLX for Apple Silicon Macs). 
-    # Depending on your system, if mlx is not the installed whisper model, remember to change that in the config section         referred to below "MODEL_ID ="
+    # Depending on your system, if mlx is not the installed whisper model, remember to change that in the config section referred to below "MODEL_ID ="
     # Check the whisper documentation for your environment.
     ```
 
