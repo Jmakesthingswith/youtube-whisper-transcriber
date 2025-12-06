@@ -1,6 +1,6 @@
-# 🎤 YouTube Whisper Transcriber
+# YouTube Whisper Transcriber
 
-## 📝 Project Overview
+## Project Overview
 
 This Python script automates the process of transcribing YouTube video audio. It leverages **`yt-dlp`** to efficiently download the audio stream of a specified YouTube URL, and then uses **`mlx-whisper`** (or standard OpenAI Whisper) to generate a full transcript.
 
@@ -8,7 +8,7 @@ This is ideal for quickly creating text versions of long-form videos, podcasts, 
 
 ---
 
-## 🚀 Features
+## Features
 
 * **YouTube Integration:** Uses `yt-dlp` to reliably fetch audio in MP3 format.
 * **High-Quality Transcription:** Utilizes the powerful OpenAI Whisper model via the `mlx-whisper` library for accurate transcription.
@@ -17,7 +17,7 @@ This is ideal for quickly creating text versions of long-form videos, podcasts, 
 
 ---
 
-## ⚙️ Prerequisites
+## Prerequisites
 
 You must have the following tools installed on your system:
 
@@ -38,7 +38,7 @@ You must have the following tools installed on your system:
 
 ---
 
-## 💻 Installation and Setup
+## Installation and Setup
 
 1.  **Clone the repository:**
     ```bash
@@ -63,7 +63,7 @@ You must have the following tools installed on your system:
 
 ---
 
-## ▶️ Usage
+## Usage
 
 To run the script, execute the Python file directly from your terminal:
 
