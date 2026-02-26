@@ -1,153 +1,89 @@
 import os
 import subprocess
-import shutil
 import re
 
 # --- Configuration ---
-# 1. Path to the audio download directory. 
-#    This will create a folder named 'transcribed_audio' in the directory where the script is run.
 DOWNLOAD_DIR = os.path.join(os.getcwd(), "transcribed_audio") 
-# 2. Your target model name
-MODEL_ID = "mlx-community/whisper-base-mlx"
-
+# Small is the "sweet spot" for speed vs. scientific accuracy (e.g., Bacillus subtilis)
+MODEL_ID = "mlx-community/whisper-small-mlx" 
 
 def clean_title(title: str) -> str:
     """Removes characters unsafe for filenames and shortens the title."""
-    # Remove characters that are illegal or problematic in filenames
     safe_title = re.sub(r'[\\/:*?"<>|]+', '_', title)
-    # Remove leading/trailing periods or spaces
     safe_title = re.sub(r'^\.|\.$', '', safe_title).strip()
-    # Limit the length to prevent excessively long file names
     return safe_title[:100].strip()
 
-
 def get_video_title(youtube_url: str) -> str | None:
-    """Uses yt-dlp to fetch the video title without downloading the video."""
-    print("Fetching video title...")
-    
-    # Command uses --print "%(title)s" and --skip-download
-    title_command = [
-        'yt-dlp', 
-        '--skip-download', 
-        '--print', 
-        '%(title)s', 
-        youtube_url
-    ]
-    
+    """Uses yt-dlp to fetch the video title."""
+    print(f"Targeting: {youtube_url}")
+    title_command = ['yt-dlp', '--skip-download', '--get-title', youtube_url]
     try:
-        # Capture the output, which should be just the title
-        result = subprocess.run(
-            title_command, 
-            capture_output=True, 
-            text=True, 
-            check=True
-        )
-        # The title is the first line of standard output
-        raw_title = result.stdout.strip().split('\n')[0]
-        return clean_title(raw_title)
-        
-    except subprocess.CalledProcessError as e:
-        print(f"Error fetching title with yt-dlp: {e.stderr.strip()}")
-        return None
+        result = subprocess.run(title_command, capture_output=True, text=True, check=True)
+        return clean_title(result.stdout.strip())
     except Exception as e:
-        print(f"An unexpected error occurred while fetching title: {e}")
-        return None
+        print(f"Error fetching title: {e}")
+        return "youtube_transcript"
 
-
-def clean_transcript_file(raw_path: str, final_path: str):
-    """Reads the raw transcript and removes all timestamp markers."""
-    print("--- Cleaning raw transcript for pure text output ---")
-    
-    # Regex pattern to identify and remove the timestamp marker: [00:00.000 --> 00:00.000]
+def process_transcript(raw_path: str, final_path: str):
+    """Filters out timestamps, repetitive hallucinations, and music tags."""
+    print("--- Refining Transcript & Removing Loops ---")
     timestamp_pattern = re.compile(r'\[\d{2}:\d{2}\.\d{3} --> \d{2}:\d{2}\.\d{3}\]')
     
-    clean_text = ""
-    try:
-        with open(raw_path, 'r', encoding='utf-8') as raw_file:
-            for line in raw_file:
-                # 1. Remove the timestamp marker from the line
-                cleaned_line = timestamp_pattern.sub('', line).strip()
+    unique_lines = []
+    last_line = ""
 
-                # Filter out specific unwanted lines
-                if cleaned_line.startswith("Args:") or "Detecting language" in cleaned_line or "Detected language:" in cleaned_line:
+    try:
+        with open(raw_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                # 1. Remove timestamps and junk
+                text = timestamp_pattern.sub('', line).strip()
+                
+                # 2. Skip technical headers and music tags
+                if not text or any(x in text for x in ["Args:", "Detecting language", "Music"]):
                     continue
                 
-                # 2. Rejoin segments with a space for continuous reading
-                if cleaned_line:
-                    clean_text += cleaned_line + " "
+                # 3. Hallucination Guard: Skip if line is a near-duplicate of the last
+                # This stops the "star-spirited" and "beautiful space" loops
+                if text.lower() == last_line.lower():
+                    continue
+                
+                unique_lines.append(text)
+                last_line = text
 
-        # Write the final, clean text to the new file
-        with open(final_path, 'w', encoding='utf-8') as final_file:
-            final_file.write(clean_text.strip())
-            
-        print(f"Clean text successfully saved to: {final_path}")
-        
+        with open(final_path, 'w', encoding='utf-8') as f:
+            f.write(" ".join(unique_lines))
+        print(f"Final text saved: {final_path}")
     except Exception as e:
-        print(f"Error during cleaning: {e}")
+        print(f"Processing error: {e}")
 
-
-def transcribe_youtube_url(youtube_url: str):
-    """Downloads audio, transcribes it, and saves the pure text using video title for names."""
-    
+def run_workflow(url: str):
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+    title = get_video_title(url)
     
-    # 1. Get the video title
-    video_title = get_video_title(youtube_url)
-    if not video_title:
-        print("Cannot proceed without a valid video title.")
-        return
+    base_path = os.path.join(DOWNLOAD_DIR, title)
+    audio_wav = f"{base_path}.wav"  # WAV is native for Whisper
+    raw_txt = f"{base_path}_raw.txt"
+    clean_txt = f"{base_path}_clean.txt"
 
-    # 2. Define dynamic file paths
-    base_file_path = os.path.join(DOWNLOAD_DIR, video_title)
-    output_audio_path = f"{base_file_path}.mp3"
-    raw_output_path = f"{base_file_path}_raw.txt" # Raw file (with timestamps)
-    final_output_path = f"{base_file_path}_clean.txt" # Final file (pure text)
-    
-    print(f"--- Starting Workflow for Video: '{video_title}' ---")
-    
-    # 3. Command to download and extract audio
-    download_command = (
-        f'yt-dlp -x --audio-format mp3 "{youtube_url}" -o "{base_file_path}.%(ext)s"'
-    )
-    
-    try:
-        subprocess.run(download_command, shell=True, check=True)
-        print("Audio downloaded successfully.")
-    except subprocess.CalledProcessError as e:
-        print(f"Error during audio download/extraction: {e.stderr.strip()}")
-        return
+    # Step 1: Download Audio (WAV 16kHz Mono is optimal for AI)
+    print("--- Downloading High-Quality Audio ---")
+    dl_cmd = f'yt-dlp -x --audio-format wav --audio-quality 0 "{url}" -o "{audio_wav}"'
+    subprocess.run(dl_cmd, shell=True, check=True)
 
-    # 4. Command to Transcribe using MLX-Whisper/Whisper 
-    print(f"--- Starting MLX-Whisper Transcription (Model: {MODEL_ID}) ---")
+    # Step 2: Transcribe via MLX
+    print(f"--- Transcribing with {MODEL_ID} ---")
+    # Added --language en to prevent the model from guessing wrong during silence
+    tx_cmd = f'mlx_whisper "{audio_wav}" --model "{MODEL_ID}" --language en > "{raw_txt}"'
+    subprocess.run(tx_cmd, shell=True, check=True)
+
+    # Step 3: Clean and Cleanup
+    process_transcript(raw_txt, clean_txt)
     
-    # Output is redirected to the temporary RAW file
-    transcribe_command = (
-        f'mlx_whisper "{output_audio_path}" --model "{MODEL_ID}" > "{raw_output_path}"'
-    )
-    
-    try:
-        subprocess.run(transcribe_command, shell=True, check=True)
-        print("Raw transcription complete.")
-        
-    except subprocess.CalledProcessError as e:
-        print(f"Error during Whisper transcription: {e.stderr.strip()}")
-        return
-
-    # 5. Clean and Finalize Output
-    clean_transcript_file(raw_output_path, final_output_path)
-
-    # 6. Clean up temporary files
-    try:
-        os.remove(output_audio_path)
-        os.remove(raw_output_path) 
-        print(f"\nCleaned up temporary files from {DOWNLOAD_DIR}.")
-    except Exception as e:
-        print(f"Warning: Could not remove temporary files. {e}")
-
+    # Cleanup temporary files
+    for f in [audio_wav, raw_txt]:
+        if os.path.exists(f): os.remove(f)
+    print("Workflow Complete.")
 
 if __name__ == "__main__":
-    video_link = input("Please enter the YouTube URL: ").strip()
-    if video_link:
-        transcribe_youtube_url(video_link)
-    else:
-        print("No URL provided. Exiting.")   
+    link = input("Enter YouTube URL: ").strip()
+    if link: run_workflow(link)
